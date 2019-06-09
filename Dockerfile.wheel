@@ -1,0 +1,39 @@
+FROM centos:7
+
+MAINTAINER Nick Gregory <computerfreak97@gmail.com>
+
+ARG PYGIRB_REPO=https://github.com/kallsyms/pygrib
+
+RUN yum install -y epel-release centos-release-scl && \
+    yum install -y rh-python36 python36-devel \
+        python36-pip git wget gcc-c++ make automake unzip && \
+    yum-builddep -y eccodes
+
+RUN pip3 install auditwheel
+
+# Need a more recent patchelf than the repos provide
+RUN cd /tmp && \
+    wget https://github.com/NixOS/patchelf/archive/0.10.tar.gz && \
+    tar -xf 0.10.tar.gz && \
+    cd patchelf-0.10 && \
+    ./bootstrap.sh && \
+    ./configure && \
+    make && \
+    make install
+
+# Need to build eccodes for MEMFS (makes packaging easier and code faster)
+RUN cd /tmp && \
+    wget https://confluence.ecmwf.int/download/attachments/45757960/eccodes-2.12.5-Source.tar.gz && \
+    tar -xf eccodes-*.tar.gz && \
+    rm eccodes-*.tar.gz && \
+    mkdir ecbuild && \
+    cd ecbuild && \
+    cmake -DENABLE_MEMFS=ON -DENABLE_PYTHON=OFF ../eccodes-* && \
+    make && \
+    make install
+
+RUN git clone $PYGRIB_REPO && \
+    cd pygrib && \
+    python3 setup.py bdist_wheel && \
+    cd dist && \
+    LD_LIBRARY_PATH="/usr/local/lib" auditwheel repair pygrib*
